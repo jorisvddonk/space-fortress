@@ -15,7 +15,111 @@ class GameScene extends Phaser.Scene {
     }
 
     preload() {
-        // No assets needed for line art game
+        // Create dynamic sound effects
+        this.createSounds();
+    }
+
+    createSounds() {
+        const audioContext = this.sound.context;
+
+        // Create audio buffers for sound effects
+        this.playerShootBuffer = this.createBeepBuffer(audioContext, 800, 0.05, 0.1);
+        this.shieldHitBuffer = this.createBeepBuffer(audioContext, 400, 0.1, 0.2);
+        this.cannonShootBuffer = this.createBeepBuffer(audioContext, 200, 0.2, 0.3);
+        this.playerHitBuffer = this.createExplosionBuffer(audioContext);
+        this.levelCompleteBuffer = this.createLevelUpBuffer(audioContext);
+    }
+
+    createBeepBuffer(audioContext, frequency, duration, volume = 0.3) {
+        const sampleRate = audioContext.sampleRate;
+        const numSamples = sampleRate * duration;
+        const buffer = audioContext.createBuffer(1, numSamples, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        // ADSR envelope for "pew pew" effect
+        const attackTime = 0.005; // 5ms attack
+        const decayTime = 0.03; // 30ms decay
+        const sustainLevel = 0.4; // sustain at 40% of peak
+        const releaseTime = duration - attackTime - decayTime;
+
+        const attackSamples = sampleRate * attackTime;
+        const decaySamples = sampleRate * decayTime;
+        const releaseSamples = sampleRate * releaseTime;
+
+        for (let i = 0; i < numSamples; i++) {
+            const t = i / sampleRate;
+            let envelope = 0;
+
+            if (t < attackTime) {
+                // Attack: linear rise to 1
+                envelope = t / attackTime;
+            } else if (t < attackTime + decayTime) {
+                // Decay: exponential drop to sustain
+                const decayProgress = (t - attackTime) / decayTime;
+                envelope = 1 + (sustainLevel - 1) * decayProgress;
+            } else if (t < duration - releaseTime) {
+                // Sustain: hold at sustain level
+                envelope = sustainLevel;
+            } else {
+                // Release: exponential fade to 0
+                const releaseProgress = (t - (duration - releaseTime)) / releaseTime;
+                envelope = sustainLevel * (1 - releaseProgress);
+            }
+
+            // Frequency sweep: start high, drop to base frequency for "pew" effect
+            const freqSweep = frequency * (1 + Math.exp(-t * 10)); // Exponential drop
+            const phase = (i * freqSweep / sampleRate) % 1;
+            data[i] = (2 * phase - 1) * volume * envelope;
+        }
+        return buffer;
+    }
+
+    createExplosionBuffer(audioContext) {
+        const sampleRate = audioContext.sampleRate;
+        const duration = 0.5;
+        const numSamples = sampleRate * duration;
+        const buffer = audioContext.createBuffer(1, numSamples, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        for (let i = 0; i < numSamples; i++) {
+            const t = i / sampleRate;
+            const noise = (Math.random() - 0.5) * 2;
+            const envelope = Math.exp(-t * 4);
+            data[i] = noise * envelope * 0.2;
+        }
+        return buffer;
+    }
+
+    createLevelUpBuffer(audioContext) {
+        const sampleRate = audioContext.sampleRate;
+        const duration = 0.8;
+        const numSamples = sampleRate * duration;
+        const buffer = audioContext.createBuffer(1, numSamples, sampleRate);
+        const data = buffer.getChannelData(0);
+
+        const notes = [523, 659, 784, 1047]; // C, E, G, C
+        let sampleIndex = 0;
+
+        notes.forEach((freq) => {
+            const noteDuration = 0.15;
+            const noteSamples = sampleRate * noteDuration;
+            for (let i = 0; i < noteSamples; i++) {
+                if (sampleIndex < numSamples) {
+                    const envelope = Math.exp(-i / noteSamples * 2);
+                    const phase = (i * freq / sampleRate) % 1;
+                    data[sampleIndex] = (2 * phase - 1) * envelope * 0.15;
+                    sampleIndex++;
+                }
+            }
+        });
+        return buffer;
+    }
+
+    playSound(buffer) {
+        const source = this.sound.context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this.sound.context.destination);
+        source.start(0);
     }
 
     create() {
@@ -214,6 +318,7 @@ class GameScene extends Phaser.Scene {
             vy: Math.sin(this.player.angle) * 4,
             radius: 2
         });
+        this.playSound(this.playerShootBuffer);
     }
 
     fireCannonShot() {
@@ -229,6 +334,7 @@ class GameScene extends Phaser.Scene {
                 vy: (dy / dist) * 1.5,
                 radius: 6
             });
+            this.playSound(this.cannonShootBuffer);
         }
     }
 
@@ -298,6 +404,7 @@ class GameScene extends Phaser.Scene {
 
                     if (dist < shot.radius + 2) { // Bullet radius + small buffer
                         segment.hits--;
+                        this.playSound(this.shieldHitBuffer);
                         if (segment.hits <= 0) {
                             segment.active = false;
                         }
@@ -351,6 +458,7 @@ class GameScene extends Phaser.Scene {
     }
 
     playerHit() {
+        this.playSound(this.playerHitBuffer);
         this.gameState.lives--;
         if (this.gameState.lives <= 0) {
             this.scene.start('GameOverScene', {
@@ -368,6 +476,7 @@ class GameScene extends Phaser.Scene {
     }
 
     nextLevel() {
+        this.playSound(this.levelCompleteBuffer);
         this.gameState.level++;
         this.gameState.cannonDestroyed = false;
         this.gameState.cannonExposed = false;
