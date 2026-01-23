@@ -1,9 +1,9 @@
-# Star Castle Clone Gameplay Documentation
+# Space Fortress Gameplay Documentation
 
 This document describes the gameplay for a faithful HTML5 clone of the classic arcade game *Star Castle*, to be implemented with Phaser.js using line art graphics.
 
 ## Overview
-*Star Castle* is a multidirectional shooter where the player pilots a spaceship to destroy a central enemy cannon protected by rotating energy shield rings. The player must navigate around the screen, avoid homing mines, and breach the shields to attack the cannon directly.
+*Space Fortress* is a multidirectional shooter where the player pilots a spaceship to destroy a central enemy cannon protected by rotating energy shield rings. The player must navigate around the screen, avoid homing mines, and breach the shields to attack the cannon directly.
 
 ## Objective
 - Breach all three shield rings to expose the central cannon.
