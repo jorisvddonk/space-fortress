@@ -36,8 +36,8 @@
         const CANVAS_HEIGHT = 600;
         const CENTER_X = 400;
         const CENTER_Y = 300;
-        const PLAYER_START_X = 400;
-        const PLAYER_START_Y = 350;
+const PLAYER_START_X = 20;
+const PLAYER_START_Y = 580;
 
 // Game state
 let player, cannon, cursors, spacebar;
@@ -102,7 +102,7 @@ let gameState = {
                 angle: -Math.PI / 2,
                 vx: 0,
                 vy: 0,
-                thrust: 0.3,
+                thrust: 0.15,
                 rotationSpeed: 0.05,
                 shotCooldown: 0,
                 graphics: graphics
@@ -124,7 +124,7 @@ let gameState = {
                     radius: radius,
                     segments: segments,
                     rotation: 0,
-                    rotationSpeed: 0.01 * (gameState.level + ringIndex * 0.5)
+                    rotationSpeed: 0.005 * (gameState.level + ringIndex * 0.5)
                 });
             }
         }
@@ -154,8 +154,8 @@ let gameState = {
                 vx: Math.cos(angle) * 2,
                 vy: Math.sin(angle) * 2,
                 outward: true,
-                speed: 2 + gameState.level * 0.5,
-                homingSpeed: 1.5 + gameState.level * 0.3,
+                speed: 1 + gameState.level * 0.25,
+                homingSpeed: 0.75 + gameState.level * 0.15,
                 radius: 5
             });
         }
@@ -319,7 +319,55 @@ let gameState = {
             }
         }
 
+        function pointToLineDistance(px, py, x1, y1, x2, y2) {
+            const A = px - x1;
+            const B = py - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+
+            let xx, yy;
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            const dx = px - xx;
+            const dy = py - yy;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
         function checkCollisions() {
+            // Player vs shield segments
+            shieldRings.forEach(ring => {
+                ring.segments.forEach((segment, segIndex) => {
+                    if (!segment.active) return;
+
+                    const angle = ring.rotation + segIndex * SEGMENT_SIZE;
+                    const x1 = CENTER_X + Math.cos(angle) * ring.radius;
+                    const y1 = CENTER_Y + Math.sin(angle) * ring.radius;
+                    const x2 = CENTER_X + Math.cos(angle + SEGMENT_SIZE) * ring.radius;
+                    const y2 = CENTER_Y + Math.sin(angle + SEGMENT_SIZE) * ring.radius;
+
+                    const dist = pointToLineDistance(player.x, player.y, x1, y1, x2, y2);
+                    if (dist < 10) { // Player radius approx 10
+                        playerHit();
+                    }
+                });
+            });
+
             // Player shots vs shield segments
             playerShots.forEach((shot, shotIndex) => {
                 shieldRings.forEach((ring, ringIndex) => {
@@ -332,12 +380,10 @@ let gameState = {
                         const x2 = CENTER_X + Math.cos(angle + SEGMENT_SIZE) * ring.radius;
                         const y2 = CENTER_Y + Math.sin(angle + SEGMENT_SIZE) * ring.radius;
                         
-                        // Simple distance check to segment midpoint
-                        const midX = (x1 + x2) / 2;
-                        const midY = (y1 + y2) / 2;
-                        const dist = Math.sqrt(Math.pow(shot.x - midX, 2) + Math.pow(shot.y - midY, 2));
-                        
-                        if (dist < 15) {
+                        // Check distance from bullet to line segment
+                        const dist = pointToLineDistance(shot.x, shot.y, x1, y1, x2, y2);
+
+                        if (dist < shot.radius + 2) { // Bullet radius + small buffer
                             segment.hits--;
                             if (segment.hits <= 0) {
                                 segment.active = false;
@@ -461,16 +507,22 @@ let gameState = {
 
         function drawShieldRings() {
             graphics.lineStyle(2, 0xffffff);
-            
+
             shieldRings.forEach(ring => {
                 ring.segments.forEach((segment, segIndex) => {
                     if (!segment.active) return;
-                    
+
                     const startAngle = ring.rotation + segIndex * SEGMENT_SIZE;
                     const endAngle = startAngle + SEGMENT_SIZE;
-                    
+
+                    const x1 = CENTER_X + Math.cos(startAngle) * ring.radius;
+                    const y1 = CENTER_Y + Math.sin(startAngle) * ring.radius;
+                    const x2 = CENTER_X + Math.cos(endAngle) * ring.radius;
+                    const y2 = CENTER_Y + Math.sin(endAngle) * ring.radius;
+
                     graphics.beginPath();
-                    graphics.arc(CENTER_X, CENTER_Y, ring.radius, startAngle, endAngle);
+                    graphics.moveTo(x1, y1);
+                    graphics.lineTo(x2, y2);
                     graphics.strokePath();
                 });
             });
