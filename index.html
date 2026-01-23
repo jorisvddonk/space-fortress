@@ -102,8 +102,8 @@ let gameState = {
                 angle: -Math.PI / 2,
                 vx: 0,
                 vy: 0,
-                thrust: 0.15,
-                rotationSpeed: 0.05,
+                thrust: 0.075,
+                rotationSpeed: 0.025,
                 shotCooldown: 0,
                 graphics: graphics
             };
@@ -124,7 +124,7 @@ let gameState = {
                     radius: radius,
                     segments: segments,
                     rotation: 0,
-                    rotationSpeed: 0.005 * (gameState.level + ringIndex * 0.5)
+                    rotationSpeed: 0.0025 * (gameState.level + ringIndex * 0.5)
                 });
             }
         }
@@ -135,7 +135,7 @@ let gameState = {
                 y: CENTER_Y,
                 active: true,
                 fireTimer: 0,
-                fireRate: 120 - gameState.level * 10
+                fireRate: 240 - gameState.level * 20
             };
         }
 
@@ -154,8 +154,8 @@ let gameState = {
                 vx: Math.cos(angle) * 2,
                 vy: Math.sin(angle) * 2,
                 outward: true,
-                speed: 1 + gameState.level * 0.25,
-                homingSpeed: 0.75 + gameState.level * 0.15,
+                speed: 0.5 + gameState.level * 0.125,
+                homingSpeed: 0.375 + gameState.level * 0.075,
                 radius: 5
             });
         }
@@ -221,7 +221,7 @@ let gameState = {
             }
             if (spacebar.isDown && player.shotCooldown === 0) {
                 firePlayerShot();
-                player.shotCooldown = 15;
+                player.shotCooldown = 30;
             }
         }
 
@@ -230,9 +230,9 @@ let gameState = {
                 ring.rotation += ring.rotationSpeed;
             });
             
-            // Check if cannon is exposed
+            // Check if cannon is exposed (exposed when any innermost segment is destroyed)
             const innerRing = shieldRings[2];
-            gameState.cannonExposed = innerRing.segments.every(seg => !seg.active);
+            gameState.cannonExposed = innerRing.segments.some(seg => !seg.active);
         }
 
         function updateMines(delta) {
@@ -297,8 +297,8 @@ let gameState = {
             playerShots.push({
                 x: player.x + Math.cos(player.angle) * 15,
                 y: player.y + Math.sin(player.angle) * 15,
-                vx: Math.cos(player.angle) * 8,
-                vy: Math.sin(player.angle) * 8,
+                vx: Math.cos(player.angle) * 4,
+                vy: Math.sin(player.angle) * 4,
                 radius: 2
             });
         }
@@ -312,8 +312,8 @@ let gameState = {
                 cannonShots.push({
                     x: cannon.x,
                     y: cannon.y,
-                    vx: (dx / dist) * 3,
-                    vy: (dy / dist) * 3,
+                    vx: (dx / dist) * 1.5,
+                    vy: (dy / dist) * 1.5,
                     radius: 6
                 });
             }
@@ -530,15 +530,85 @@ let gameState = {
 
         function drawCannon() {
             if (!cannon.active) return;
-            
+
+            // Calculate angle to player for aiming
+            const dx = player.x - cannon.x;
+            const dy = player.y - cannon.y;
+            const angleToPlayer = Math.atan2(dy, dx);
+
             if (gameState.cannonExposed) {
                 graphics.lineStyle(2, 0xff0000);
-                graphics.strokeRect(cannon.x - 15, cannon.y - 15, 30, 30);
+
+                // Draw main wedge body (triangular fortress shape)
+                const wedgeSize = 25;
+                graphics.beginPath();
+                graphics.moveTo(cannon.x, cannon.y);
+                graphics.lineTo(
+                    cannon.x + Math.cos(angleToPlayer - Math.PI/6) * wedgeSize,
+                    cannon.y + Math.sin(angleToPlayer - Math.PI/6) * wedgeSize
+                );
+                graphics.lineTo(
+                    cannon.x + Math.cos(angleToPlayer + Math.PI/6) * wedgeSize,
+                    cannon.y + Math.sin(angleToPlayer + Math.PI/6) * wedgeSize
+                );
+                graphics.closePath();
+                graphics.strokePath();
+
+                // Draw cannon barrel
+                const barrelLength = 35;
+                graphics.beginPath();
+                graphics.moveTo(
+                    cannon.x + Math.cos(angleToPlayer - Math.PI/12) * 15,
+                    cannon.y + Math.sin(angleToPlayer - Math.PI/12) * 15
+                );
+                graphics.lineTo(
+                    cannon.x + Math.cos(angleToPlayer) * barrelLength,
+                    cannon.y + Math.sin(angleToPlayer) * barrelLength
+                );
+                graphics.lineTo(
+                    cannon.x + Math.cos(angleToPlayer + Math.PI/12) * 15,
+                    cannon.y + Math.sin(angleToPlayer + Math.PI/12) * 15
+                );
+                graphics.strokePath();
+
+                // Draw fortress details (corner turrets)
+                const turretSize = 8;
+                const turretAngles = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+                turretAngles.forEach(turretAngle => {
+                    graphics.beginPath();
+                    graphics.arc(
+                        cannon.x + Math.cos(turretAngle) * 20,
+                        cannon.y + Math.sin(turretAngle) * 20,
+                        turretSize, 0, Math.PI * 2
+                    );
+                    graphics.strokePath();
+                });
             } else {
-                // Draw tracking indicator
+                // Draw dormant fortress (always visible)
+                graphics.lineStyle(2, 0x800000);
+
+                // Draw central core
+                graphics.beginPath();
+                graphics.arc(cannon.x, cannon.y, 12, 0, Math.PI * 2);
+                graphics.strokePath();
+
+                // Draw fortress outline (octagon shape)
+                graphics.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI) / 4;
+                    const x = cannon.x + Math.cos(angle) * 20;
+                    const y = cannon.y + Math.sin(angle) * 20;
+                    if (i === 0) {
+                        graphics.moveTo(x, y);
+                    } else {
+                        graphics.lineTo(x, y);
+                    }
+                }
+                graphics.closePath();
+                graphics.strokePath();
+
+                // Draw tracking indicator (small circle showing aim)
                 graphics.lineStyle(1, 0x800000);
-                const dx = player.x - cannon.x;
-                const dy = player.y - cannon.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 0) {
                     const x = cannon.x + (dx / dist) * 25;
