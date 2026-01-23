@@ -19,22 +19,511 @@
                 preload: preload,
                 create: create,
                 update: update
+            },
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
             }
         };
 
         const game = new Phaser.Game(config);
 
+        // Game constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const CENTER_X = 400;
+        const CENTER_Y = 300;
+        const PLAYER_START_X = 400;
+        const PLAYER_START_Y = 350;
+
+// Game state
+let player, cannon, cursors, spacebar;
+let shieldRings = [];
+let mines = [];
+let playerShots = [];
+let cannonShots = [];
+let graphics;
+let scoreText, livesText, levelText;
+let gameState = {
+    lives: 3,
+    score: 0,
+    level: 1,
+    cannonExposed: false,
+    cannonDestroyed: false
+};
+
+        // Shield ring configuration
+        const SHIELD_RADII = [240, 160, 80];
+        const SEGMENTS_PER_RING = 12;
+        const SEGMENT_SIZE = Math.PI * 2 / SEGMENTS_PER_RING;
+        const HITS_PER_SEGMENT = 2;
+
         function preload() {
-            // Load game assets here
+            // No assets needed for line art game
         }
 
         function create() {
-            // Initialize game objects here
+            graphics = this.add.graphics();
+            
+            // Initialize input
+            cursors = this.input.keyboard.createCursorKeys();
+            spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+            
+            // Create player ship
+            createPlayer();
+            
+            // Create shield rings
+            createShieldRings();
+            
+            // Create cannon
+            createCannon();
+            
+            // Create mines
+            createMines();
+            
+            // Create UI text
+            scoreText = this.add.text(10, 20, `Score: ${gameState.score}`, { fontSize: '16px', fill: '#ffffff' });
+            livesText = this.add.text(10, 40, `Lives: ${gameState.lives}`, { fontSize: '16px', fill: '#ffffff' });
+            levelText = this.add.text(10, 60, `Level: ${gameState.level}`, { fontSize: '16px', fill: '#ffffff' });
+            
+            // Create collision groups
+            this.physics.add.group(playerShots);
+            this.physics.add.group(cannonShots);
+            this.physics.add.group(mines);
         }
 
-        function update() {
-            // Game loop logic here
+        function createPlayer() {
+            player = {
+                x: PLAYER_START_X,
+                y: PLAYER_START_Y,
+                angle: -Math.PI / 2,
+                vx: 0,
+                vy: 0,
+                thrust: 0.3,
+                rotationSpeed: 0.05,
+                shotCooldown: 0,
+                graphics: graphics
+            };
         }
+
+        function createShieldRings() {
+            shieldRings = [];
+            for (let ringIndex = 0; ringIndex < 3; ringIndex++) {
+                const radius = SHIELD_RADII[ringIndex];
+                const segments = [];
+                for (let segIndex = 0; segIndex < SEGMENTS_PER_RING; segIndex++) {
+                    segments.push({
+                        hits: HITS_PER_SEGMENT,
+                        active: true
+                    });
+                }
+                shieldRings.push({
+                    radius: radius,
+                    segments: segments,
+                    rotation: 0,
+                    rotationSpeed: 0.01 * (gameState.level + ringIndex * 0.5)
+                });
+            }
+        }
+
+        function createCannon() {
+            cannon = {
+                x: CENTER_X,
+                y: CENTER_Y,
+                active: true,
+                fireTimer: 0,
+                fireRate: 120 - gameState.level * 10
+            };
+        }
+
+        function createMines() {
+            mines = [];
+            for (let i = 0; i < 3; i++) {
+                spawnMine();
+            }
+        }
+
+        function spawnMine() {
+            const angle = Math.random() * Math.PI * 2;
+            mines.push({
+                x: CENTER_X,
+                y: CENTER_Y,
+                vx: Math.cos(angle) * 2,
+                vy: Math.sin(angle) * 2,
+                outward: true,
+                speed: 2 + gameState.level * 0.5,
+                homingSpeed: 1.5 + gameState.level * 0.3,
+                radius: 5
+            });
+        }
+
+        function update(time, delta) {
+            // Clear graphics
+            graphics.clear();
+            
+            // Update game objects
+            updatePlayer(delta);
+            updateShieldRings(delta);
+            updateMines(delta);
+            updateCannon(delta);
+            updateShots(delta);
+            checkCollisions();
+            
+            // Draw everything
+            drawShieldRings();
+            drawCannon();
+            drawPlayer();
+            drawMines();
+            drawShots();
+            
+            // Check win condition
+            if (gameState.cannonDestroyed) {
+                nextLevel();
+            }
+            
+            // Update UI
+            scoreText.setText(`Score: ${gameState.score}`);
+            livesText.setText(`Lives: ${gameState.lives}`);
+            levelText.setText(`Level: ${gameState.level}`);
+        }
+
+        function updatePlayer(delta) {
+            // Handle input
+            if (cursors.left.isDown) {
+                player.angle -= player.rotationSpeed;
+            }
+            if (cursors.right.isDown) {
+                player.angle += player.rotationSpeed;
+            }
+            if (cursors.up.isDown) {
+                player.vx += Math.cos(player.angle) * player.thrust;
+                player.vy += Math.sin(player.angle) * player.thrust;
+            }
+            
+            // Apply friction
+            player.vx *= 0.98;
+            player.vy *= 0.98;
+            
+            // Update position
+            player.x += player.vx;
+            player.y += player.vy;
+            
+            // Keep within bounds
+            player.x = Math.max(20, Math.min(CANVAS_WIDTH - 20, player.x));
+            player.y = Math.max(20, Math.min(CANVAS_HEIGHT - 20, player.y));
+            
+            // Handle shooting
+            if (player.shotCooldown > 0) {
+                player.shotCooldown--;
+            }
+            if (spacebar.isDown && player.shotCooldown === 0) {
+                firePlayerShot();
+                player.shotCooldown = 15;
+            }
+        }
+
+        function updateShieldRings(delta) {
+            shieldRings.forEach(ring => {
+                ring.rotation += ring.rotationSpeed;
+            });
+            
+            // Check if cannon is exposed
+            const innerRing = shieldRings[2];
+            gameState.cannonExposed = innerRing.segments.every(seg => !seg.active);
+        }
+
+        function updateMines(delta) {
+            mines.forEach((mine, index) => {
+                if (mine.outward) {
+                    // Move outward
+                    mine.x += mine.vx * mine.speed;
+                    mine.y += mine.vy * mine.speed;
+                    
+                    // Check if passed through outer ring
+                    const dist = Math.sqrt(Math.pow(mine.x - CENTER_X, 2) + Math.pow(mine.y - CENTER_Y, 2));
+                    if (dist > SHIELD_RADII[0]) {
+                        mine.outward = false;
+                    }
+                } else {
+                    // Homing mode
+                    const dx = player.x - mine.x;
+                    const dy = player.y - mine.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 0) {
+                        mine.vx = (dx / dist) * mine.homingSpeed;
+                        mine.vy = (dy / dist) * mine.homingSpeed;
+                        mine.x += mine.vx;
+                        mine.y += mine.vy;
+                    }
+                }
+            });
+        }
+
+        function updateCannon(delta) {
+            if (!gameState.cannonExposed || !cannon.active) return;
+            
+            cannon.fireTimer++;
+            if (cannon.fireTimer >= cannon.fireRate) {
+                fireCannonShot();
+                cannon.fireTimer = 0;
+            }
+        }
+
+        function updateShots(delta) {
+            // Update player shots
+            playerShots = playerShots.filter(shot => {
+                shot.x += shot.vx;
+                shot.y += shot.vy;
+                
+                // Remove if out of bounds
+                return shot.x > 0 && shot.x < CANVAS_WIDTH && shot.y > 0 && shot.y < CANVAS_HEIGHT;
+            });
+            
+            // Update cannon shots
+            cannonShots = cannonShots.filter(shot => {
+                shot.x += shot.vx;
+                shot.y += shot.vy;
+                
+                // Remove if out of bounds
+                return shot.x > 0 && shot.x < CANVAS_WIDTH && shot.y > 0 && shot.y < CANVAS_HEIGHT;
+            });
+        }
+
+        function firePlayerShot() {
+            playerShots.push({
+                x: player.x + Math.cos(player.angle) * 15,
+                y: player.y + Math.sin(player.angle) * 15,
+                vx: Math.cos(player.angle) * 8,
+                vy: Math.sin(player.angle) * 8,
+                radius: 2
+            });
+        }
+
+        function fireCannonShot() {
+            const dx = player.x - cannon.x;
+            const dy = player.y - cannon.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0) {
+                cannonShots.push({
+                    x: cannon.x,
+                    y: cannon.y,
+                    vx: (dx / dist) * 3,
+                    vy: (dy / dist) * 3,
+                    radius: 6
+                });
+            }
+        }
+
+        function checkCollisions() {
+            // Player shots vs shield segments
+            playerShots.forEach((shot, shotIndex) => {
+                shieldRings.forEach((ring, ringIndex) => {
+                    ring.segments.forEach((segment, segIndex) => {
+                        if (!segment.active) return;
+                        
+                        const angle = ring.rotation + segIndex * SEGMENT_SIZE;
+                        const x1 = CENTER_X + Math.cos(angle) * ring.radius;
+                        const y1 = CENTER_Y + Math.sin(angle) * ring.radius;
+                        const x2 = CENTER_X + Math.cos(angle + SEGMENT_SIZE) * ring.radius;
+                        const y2 = CENTER_Y + Math.sin(angle + SEGMENT_SIZE) * ring.radius;
+                        
+                        // Simple distance check to segment midpoint
+                        const midX = (x1 + x2) / 2;
+                        const midY = (y1 + y2) / 2;
+                        const dist = Math.sqrt(Math.pow(shot.x - midX, 2) + Math.pow(shot.y - midY, 2));
+                        
+                        if (dist < 15) {
+                            segment.hits--;
+                            if (segment.hits <= 0) {
+                                segment.active = false;
+                            }
+                            playerShots.splice(shotIndex, 1);
+                        }
+                    });
+                });
+            });
+            
+            // Player shots vs mines
+            playerShots.forEach((shot, shotIndex) => {
+                mines.forEach((mine, mineIndex) => {
+                    const dist = Math.sqrt(Math.pow(shot.x - mine.x, 2) + Math.pow(shot.y - mine.y, 2));
+                    if (dist < shot.radius + mine.radius) {
+                        mines.splice(mineIndex, 1);
+                        playerShots.splice(shotIndex, 1);
+                        spawnMine();
+                    }
+                });
+            });
+            
+            // Player shots vs cannon
+            playerShots.forEach((shot, shotIndex) => {
+                if (gameState.cannonExposed && cannon.active) {
+                    const dist = Math.sqrt(Math.pow(shot.x - cannon.x, 2) + Math.pow(shot.y - cannon.y, 2));
+                    if (dist < 20) {
+                        cannon.active = false;
+                        gameState.cannonDestroyed = true;
+                        gameState.score += 100;
+                        playerShots.splice(shotIndex, 1);
+                    }
+                }
+            });
+            
+            // Cannon shots vs player
+            cannonShots.forEach((shot, shotIndex) => {
+                const dist = Math.sqrt(Math.pow(shot.x - player.x, 2) + Math.pow(shot.y - player.y, 2));
+                if (dist < shot.radius + 10) {
+                    playerHit();
+                    cannonShots.splice(shotIndex, 1);
+                }
+            });
+            
+            // Mines vs player
+            mines.forEach(mine => {
+                const dist = Math.sqrt(Math.pow(mine.x - player.x, 2) + Math.pow(mine.y - player.y, 2));
+                if (dist < mine.radius + 10) {
+                    playerHit();
+                }
+            });
+        }
+
+        function playerHit() {
+            gameState.lives--;
+            if (gameState.lives <= 0) {
+                gameOver();
+            } else {
+                // Respawn player
+                player.x = PLAYER_START_X;
+                player.y = PLAYER_START_Y;
+                player.vx = 0;
+                player.vy = 0;
+                player.angle = -Math.PI / 2;
+            }
+        }
+
+        function nextLevel() {
+            gameState.level++;
+            gameState.cannonDestroyed = false;
+            gameState.cannonExposed = false;
+            gameState.lives++;
+            
+            // Reset shields
+            createShieldRings();
+            
+            // Reset cannon
+            createCannon();
+            
+            // Clear shots
+            playerShots = [];
+            cannonShots = [];
+            
+            // Respawn player
+            player.x = PLAYER_START_X;
+            player.y = PLAYER_START_Y;
+            player.vx = 0;
+            player.vy = 0;
+            player.angle = -Math.PI / 2;
+        }
+
+        function gameOver() {
+            // Simple game over - reload page
+            location.reload();
+        }
+
+        function drawPlayer() {
+            const cos = Math.cos(player.angle);
+            const sin = Math.sin(player.angle);
+            
+            graphics.lineStyle(2, 0x00ff00);
+            graphics.beginPath();
+            
+            // Calculate rotated triangle points
+            const p1x = player.x + cos * 15 - sin * 0;
+            const p1y = player.y + sin * 15 + cos * 0;
+            const p2x = player.x + cos * -10 - sin * -8;
+            const p2y = player.y + sin * -10 + cos * -8;
+            const p3x = player.x + cos * -5 - sin * 0;
+            const p3y = player.y + sin * -5 + cos * 0;
+            const p4x = player.x + cos * -10 - sin * 8;
+            const p4y = player.y + sin * -10 + cos * 8;
+            
+            graphics.moveTo(p1x, p1y);
+            graphics.lineTo(p2x, p2y);
+            graphics.lineTo(p3x, p3y);
+            graphics.lineTo(p4x, p4y);
+            graphics.closePath();
+            graphics.strokePath();
+        }
+
+        function drawShieldRings() {
+            graphics.lineStyle(2, 0xffffff);
+            
+            shieldRings.forEach(ring => {
+                ring.segments.forEach((segment, segIndex) => {
+                    if (!segment.active) return;
+                    
+                    const startAngle = ring.rotation + segIndex * SEGMENT_SIZE;
+                    const endAngle = startAngle + SEGMENT_SIZE;
+                    
+                    graphics.beginPath();
+                    graphics.arc(CENTER_X, CENTER_Y, ring.radius, startAngle, endAngle);
+                    graphics.strokePath();
+                });
+            });
+        }
+
+        function drawCannon() {
+            if (!cannon.active) return;
+            
+            if (gameState.cannonExposed) {
+                graphics.lineStyle(2, 0xff0000);
+                graphics.strokeRect(cannon.x - 15, cannon.y - 15, 30, 30);
+            } else {
+                // Draw tracking indicator
+                graphics.lineStyle(1, 0x800000);
+                const dx = player.x - cannon.x;
+                const dy = player.y - cannon.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0) {
+                    const x = cannon.x + (dx / dist) * 25;
+                    const y = cannon.y + (dy / dist) * 25;
+                    graphics.beginPath();
+                    graphics.arc(x, y, 3, 0, Math.PI * 2);
+                    graphics.strokePath();
+                }
+            }
+        }
+
+        function drawMines() {
+            graphics.fillStyle(0xff0000);
+            mines.forEach(mine => {
+                graphics.beginPath();
+                graphics.arc(mine.x, mine.y, mine.radius, 0, Math.PI * 2);
+                graphics.fillPath();
+            });
+        }
+
+        function drawShots() {
+            // Player shots
+            graphics.fillStyle(0xffffff);
+            playerShots.forEach(shot => {
+                graphics.beginPath();
+                graphics.arc(shot.x, shot.y, shot.radius, 0, Math.PI * 2);
+                graphics.fillPath();
+            });
+            
+            // Cannon shots
+            graphics.fillStyle(0xff0000);
+            cannonShots.forEach(shot => {
+                graphics.fillRect(shot.x - shot.radius, shot.y - shot.radius, shot.radius * 2, shot.radius * 2);
+            });
+        }
+
+        
     </script>
 </body>
 </html>
