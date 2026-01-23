@@ -23,64 +23,87 @@
                 }).setOrigin(0.5);
 
                 // Menu options
+                this.menuOptions = [];
+                this.selectedIndex = 0;
+
                 const startText = this.add.text(500, 350, 'START GAME', {
                     fontSize: '32px',
-                    fill: '#00ff00'
+                    fill: '#ffff00'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(startText);
 
                 const helpText = this.add.text(500, 420, 'HELP', {
                     fontSize: '32px',
                     fill: '#ffffff'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(helpText);
 
                 const creditsText = this.add.text(500, 490, 'CREDITS', {
                     fontSize: '32px',
                     fill: '#ffffff'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(creditsText);
+
+                // Keyboard navigation
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+                this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
                 // Menu interactions
                 startText.on('pointerdown', () => {
                     this.scene.start('GameScene');
                 });
 
-                startText.on('pointerover', () => {
-                    startText.setFill('#ffff00');
-                });
-
-                startText.on('pointerout', () => {
-                    startText.setFill('#00ff00');
-                });
-
                 helpText.on('pointerdown', () => {
                     this.scene.start('HelpScene');
-                });
-
-                helpText.on('pointerover', () => {
-                    helpText.setFill('#ffff00');
-                });
-
-                helpText.on('pointerout', () => {
-                    helpText.setFill('#ffffff');
                 });
 
                 creditsText.on('pointerdown', () => {
                     this.scene.start('CreditsScene');
                 });
 
-                creditsText.on('pointerover', () => {
-                    creditsText.setFill('#ffff00');
-                });
+                // Update visual selection
+                this.updateMenuSelection();
+            }
 
-                creditsText.on('pointerout', () => {
-                    creditsText.setFill('#ffffff');
-                });
+            update() {
+                // Handle keyboard navigation
+                if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+                    this.selectedIndex = (this.selectedIndex + 1) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+                    this.selectedIndex = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                }
 
-                // Instructions
-                this.add.text(500, 600, 'Use arrow keys to move, SPACE to shoot', {
-                    fontSize: '18px',
-                    fill: '#888888',
-                    align: 'center'
-                }).setOrigin(0.5);
+                // Handle selection
+                if (Phaser.Input.Keyboard.JustDown(this.spacebar) || Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+                    this.selectCurrentOption();
+                }
+            }
+
+            updateMenuSelection() {
+                this.menuOptions.forEach((option, index) => {
+                    if (index === this.selectedIndex) {
+                        option.setFill('#ffff00');
+                    } else {
+                        option.setFill('#ffffff');
+                    }
+                });
+            }
+
+            selectCurrentOption() {
+                switch (this.selectedIndex) {
+                    case 0: // Start Game
+                        this.scene.start('GameScene');
+                        break;
+                    case 1: // Help
+                        this.scene.start('HelpScene');
+                        break;
+                    case 2: // Credits
+                        this.scene.start('CreditsScene');
+                        break;
+                }
             }
         }
 
@@ -98,32 +121,17 @@
                 }).setOrigin(0.5);
 
                 // Instructions
-                const instructions = [
-                    'OBJECTIVE:',
-                    'Destroy the fortress cannon by breaching all shield rings.',
-                    '',
-                    'CONTROLS:',
-                    '↑ - Thrust forward',
-                    '← → - Rotate ship',
-                    'SPACE - Fire bullets',
-                    '',
-                    'GAMEPLAY:',
-                    '• Destroy shield segments with your bullets',
-                    '• Avoid mines and cannon fire',
-                    '• Cannon activates when inner ring is breached',
-                    '• Advance levels by destroying the cannon',
-                    '',
-                    'SCORING:',
-                    '• Cannon destruction: 100 points',
-                    '• Extra life awarded per cannon destroyed'
-                ];
+                this.add.text(500, 580, 'Use arrow keys to navigate menus, SPACE/ENTER to select', {
+                    fontSize: '16px',
+                    fill: '#888888',
+                    align: 'center'
+                }).setOrigin(0.5);
 
-                instructions.forEach((line, index) => {
-                    this.add.text(500, 160 + index * 25, line, {
-                        fontSize: '16px',
-                        fill: '#ffffff',
-                        align: 'center'
-                    }).setOrigin(0.5);
+                this.add.text(500, 610, 'Use arrow keys to move, SPACE to shoot', {
+                    fontSize: '16px',
+                    fill: '#888888',
+                    align: 'center'
+                }).setOrigin(0.5);
                 });
 
                 // Back button
@@ -132,17 +140,23 @@
                     fill: '#ffff00'
                 }).setOrigin(0.5).setInteractive();
 
+                // Keyboard navigation
+                this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+                this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+                this.escapeKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
                 backText.on('pointerdown', () => {
                     this.scene.start('MenuScene');
                 });
+            }
 
-                backText.on('pointerover', () => {
-                    backText.setFill('#ffffff');
-                });
-
-                backText.on('pointerout', () => {
-                    backText.setFill('#ffff00');
-                });
+            update() {
+                // Handle back navigation
+                if (Phaser.Input.Keyboard.JustDown(this.spacebar) ||
+                    Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+                    Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+                    this.scene.start('MenuScene');
+                }
             }
         }
 
@@ -186,17 +200,23 @@
                     fill: '#ffff00'
                 }).setOrigin(0.5).setInteractive();
 
+                // Keyboard navigation
+                this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+                this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+                this.escapeKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+
                 backText.on('pointerdown', () => {
                     this.scene.start('MenuScene');
                 });
+            }
 
-                backText.on('pointerover', () => {
-                    backText.setFill('#ffffff');
-                });
-
-                backText.on('pointerout', () => {
-                    backText.setFill('#ffff00');
-                });
+            update() {
+                // Handle back navigation
+                if (Phaser.Input.Keyboard.JustDown(this.spacebar) ||
+                    Phaser.Input.Keyboard.JustDown(this.enterKey) ||
+                    Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+                    this.scene.start('MenuScene');
+                }
             }
         }
 
@@ -232,39 +252,70 @@
                 }).setOrigin(0.5);
 
                 // Menu buttons
+                this.menuOptions = [];
+                this.selectedIndex = 0;
+
                 const restartText = this.add.text(400, 450, 'PLAY AGAIN', {
                     fontSize: '28px',
-                    fill: '#00ff00'
+                    fill: '#ffff00'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(restartText);
 
                 const menuText = this.add.text(600, 450, 'MAIN MENU', {
                     fontSize: '28px',
                     fill: '#ffffff'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(menuText);
+
+                // Keyboard navigation
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+                this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
                 restartText.on('pointerdown', () => {
                     this.scene.start('GameScene');
-                });
-
-                restartText.on('pointerover', () => {
-                    restartText.setFill('#ffff00');
-                });
-
-                restartText.on('pointerout', () => {
-                    restartText.setFill('#00ff00');
                 });
 
                 menuText.on('pointerdown', () => {
                     this.scene.start('MenuScene');
                 });
 
-                menuText.on('pointerover', () => {
-                    menuText.setFill('#ffff00');
-                });
+                // Update visual selection
+                this.updateMenuSelection();
+            }
 
-                menuText.on('pointerout', () => {
-                    menuText.setFill('#ffffff');
+            update() {
+                // Handle keyboard navigation
+                if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+                    this.selectedIndex = (this.selectedIndex + 1) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+                    this.selectedIndex = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                }
+
+                // Handle selection
+                if (Phaser.Input.Keyboard.JustDown(this.spacebar) || Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+                    this.selectCurrentOption();
+                }
+            }
+
+            updateMenuSelection() {
+                this.menuOptions.forEach((option, index) => {
+                    if (index === this.selectedIndex) {
+                        option.setFill('#ffff00');
+                    } else {
+                        option.setFill(index === 0 ? '#00ff00' : '#ffffff');
+                    }
                 });
+            }
+
+            selectCurrentOption() {
+                if (this.selectedIndex === 0) {
+                    this.scene.start('GameScene'); // Play Again
+                } else {
+                    this.scene.start('MenuScene'); // Main Menu
+                }
             }
         }
 
@@ -922,27 +973,30 @@
                 }).setOrigin(0.5);
 
                 // Menu options
+                this.menuOptions = [];
+                this.selectedIndex = 0;
+
                 const resumeText = this.add.text(500, 400, 'RESUME', {
                     fontSize: '32px',
-                    fill: '#00ff00'
+                    fill: '#ffff00'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(resumeText);
 
                 const menuText = this.add.text(500, 470, 'MAIN MENU', {
                     fontSize: '32px',
                     fill: '#ffffff'
                 }).setOrigin(0.5).setInteractive();
+                this.menuOptions.push(menuText);
+
+                // Keyboard navigation
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+                this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+                this.escapeKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
                 resumeText.on('pointerdown', () => {
                     this.scene.stop();
                     this.scene.resume('GameScene');
-                });
-
-                resumeText.on('pointerover', () => {
-                    resumeText.setFill('#ffff00');
-                });
-
-                resumeText.on('pointerout', () => {
-                    resumeText.setFill('#00ff00');
                 });
 
                 menuText.on('pointerdown', () => {
@@ -950,13 +1004,50 @@
                     this.scene.start('MenuScene');
                 });
 
-                menuText.on('pointerover', () => {
-                    menuText.setFill('#ffff00');
-                });
+                // Update visual selection
+                this.updateMenuSelection();
+            }
 
-                menuText.on('pointerout', () => {
-                    menuText.setFill('#ffffff');
+            update() {
+                // Handle keyboard navigation
+                if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
+                    this.selectedIndex = (this.selectedIndex + 1) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+                    this.selectedIndex = (this.selectedIndex - 1 + this.menuOptions.length) % this.menuOptions.length;
+                    this.updateMenuSelection();
+                }
+
+                // Handle selection
+                if (Phaser.Input.Keyboard.JustDown(this.spacebar) || Phaser.Input.Keyboard.JustDown(this.enterKey)) {
+                    this.selectCurrentOption();
+                }
+
+                // ESC to resume
+                if (Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+                    this.scene.stop();
+                    this.scene.resume('GameScene');
+                }
+            }
+
+            updateMenuSelection() {
+                this.menuOptions.forEach((option, index) => {
+                    if (index === this.selectedIndex) {
+                        option.setFill('#ffff00');
+                    } else {
+                        option.setFill('#ffffff');
+                    }
                 });
+            }
+
+            selectCurrentOption() {
+                if (this.selectedIndex === 0) {
+                    this.scene.stop();
+                    this.scene.resume('GameScene'); // Resume
+                } else {
+                    this.scene.stop();
+                    this.scene.start('MenuScene'); // Main Menu
+                }
             }
         }
 
